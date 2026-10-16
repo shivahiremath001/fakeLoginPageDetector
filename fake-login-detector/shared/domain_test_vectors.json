@@ -1,0 +1,208 @@
+{
+  "description": "Domain test vectors shared between pytest (Python) and Node tests (extension JS). Each entry is run by both test suites to ensure parity.",
+  "vectors": [
+    {
+      "id": "exact_match",
+      "label": "college",
+      "brand": "college",
+      "expect_skeleton_match": true,
+      "note": "Identical strings must match"
+    },
+    {
+      "id": "digit_zero",
+      "label": "c0llege",
+      "brand": "college",
+      "expect_skeleton_match": true,
+      "note": "0 → o leet substitution"
+    },
+    {
+      "id": "digit_one",
+      "label": "col1ege",
+      "brand": "college",
+      "expect_skeleton_match": true,
+      "note": "1 → l leet substitution"
+    },
+    {
+      "id": "rn_m",
+      "label": "rnicrosoft",
+      "brand": "microsoft",
+      "expect_skeleton_match": true,
+      "note": "rn → m multi-char substitution"
+    },
+    {
+      "id": "vv_w",
+      "label": "vvebmail",
+      "brand": "webmail",
+      "expect_skeleton_match": true,
+      "note": "vv → w multi-char substitution"
+    },
+    {
+      "id": "cyrillic_a",
+      "label": "\u0430ccount",
+      "brand": "account",
+      "expect_skeleton_match": true,
+      "note": "Cyrillic а (U+0430) → a"
+    },
+    {
+      "id": "cyrillic_e",
+      "label": "coll\u0435ge",
+      "brand": "college",
+      "expect_skeleton_match": true,
+      "note": "Cyrillic е (U+0435) → e"
+    },
+    {
+      "id": "cyrillic_o",
+      "label": "c\u043ellege",
+      "brand": "college",
+      "expect_skeleton_match": true,
+      "note": "Cyrillic о (U+043E) → o"
+    },
+    {
+      "id": "greek_alpha",
+      "label": "\u03b1ccount",
+      "brand": "account",
+      "expect_skeleton_match": true,
+      "note": "Greek α (U+03B1) → a"
+    },
+    {
+      "id": "greek_omicron",
+      "label": "p\u03bfrtal",
+      "brand": "portal",
+      "expect_skeleton_match": true,
+      "note": "Greek ο (U+03BF) → o"
+    },
+    {
+      "id": "hyphen_stripped",
+      "label": "college-portal",
+      "brand": "collegeportal",
+      "expect_skeleton_match": true,
+      "note": "Hyphens are stripped"
+    },
+    {
+      "id": "mix_leet_cyrillic",
+      "label": "c0ll\u0435ge",
+      "brand": "college",
+      "expect_skeleton_match": true,
+      "note": "Mixed leet and Cyrillic substitution"
+    },
+    {
+      "id": "unrelated_different",
+      "label": "amazon",
+      "brand": "college",
+      "expect_skeleton_match": false,
+      "note": "Completely different label must not match"
+    },
+    {
+      "id": "empty_label",
+      "label": "",
+      "brand": "college",
+      "expect_skeleton_match": false,
+      "note": "Empty label must not match non-empty brand"
+    },
+    {
+      "id": "subdomain_trick",
+      "label": "college",
+      "brand_in_subdomain": "college.edu.evil.com",
+      "brand": "college",
+      "expect_brand_in_subdomain": true,
+      "note": "Brand label embedded in a subdomain of a different registered domain"
+    },
+    {
+      "id": "no_subdomain_trick",
+      "label": "portal",
+      "brand_in_subdomain": "portal.college.edu",
+      "brand": "portal",
+      "expect_brand_in_subdomain": false,
+      "note": "Brand label is the registerable domain itself — not a trick"
+    },
+    {
+      "id": "punycode",
+      "label": "xn--80ak6aa92e",
+      "brand": "google",
+      "expect_skeleton_match": false,
+      "note": "Punycode label (must not crash); actual match depends on decode"
+    },
+    {
+      "id": "ip_address",
+      "url": "http://192.168.1.1/login",
+      "is_ip": true,
+      "note": "IP address as host is a risk signal"
+    },
+    {
+      "id": "userinfo_at",
+      "url": "http://college.edu@evil.com/login",
+      "has_userinfo": true,
+      "note": "@ userinfo trick confuses users reading the URL"
+    },
+    {
+      "id": "phishing_keyword_login",
+      "host": "secure-login-college.com",
+      "has_phishing_keyword": true,
+      "note": "Phishing keyword 'login' in hostname"
+    },
+    {
+      "id": "phishing_keyword_verify",
+      "host": "verify-college-portal.tk",
+      "has_phishing_keyword": true,
+      "note": "Phishing keyword 'verify' plus risky TLD"
+    },
+    {
+      "id": "risky_tld_xyz",
+      "host": "college.xyz",
+      "risky_tld": true,
+      "note": ".xyz is a risky TLD"
+    },
+    {
+      "id": "risky_tld_tk",
+      "host": "college-portal.tk",
+      "risky_tld": true,
+      "note": ".tk is a risky TLD"
+    },
+    {
+      "id": "safe_tld_edu",
+      "host": "portal.college.edu",
+      "risky_tld": false,
+      "note": ".edu is not a risky TLD"
+    },
+    {
+      "id": "excessive_subdomains",
+      "host": "login.secure.college.portal.evil.com",
+      "excessive_subdomains": true,
+      "note": "More than 3 subdomain levels is suspicious"
+    },
+    {
+      "id": "double_hyphen",
+      "host": "college--portal.com",
+      "double_hyphen": true,
+      "note": "Two or more consecutive hyphens"
+    },
+    {
+      "id": "localhost_different_port",
+      "url": "http://localhost:5002/login",
+      "genuine_origin": "localhost:5001",
+      "expect_different_origin": true,
+      "note": "localhost:5002 is a different origin from localhost:5001"
+    },
+    {
+      "id": "localhost_same_port",
+      "url": "http://localhost:5001/login",
+      "genuine_origin": "localhost:5001",
+      "expect_different_origin": false,
+      "note": "Same localhost port → same origin"
+    },
+    {
+      "id": "five_s_digit",
+      "label": "5ecure",
+      "brand": "secure",
+      "expect_skeleton_match": true,
+      "note": "5 → s leet substitution"
+    },
+    {
+      "id": "levenshtein_close",
+      "label": "collage",
+      "brand": "college",
+      "expect_levenshtein_close": true,
+      "note": "Levenshtein distance 2 out of 7 → >0.70 similarity"
+    }
+  ]
+}

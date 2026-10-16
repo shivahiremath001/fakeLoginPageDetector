@@ -1,0 +1,23 @@
+{
+  "weights": {
+    "visual": 0.30,
+    "dom": 0.25,
+    "form": 0.20,
+    "domain": 0.15,
+    "assets": 0.10
+  },
+  "thresholds": {
+    "low_risk": 20,
+    "suspicious": 70
+  },
+  "phishing_keywords": [
+    "login", "secure", "verify", "account", "portal",
+    "update", "signin", "confirm", "validate", "auth",
+    "webmail", "student", "banking", "payment"
+  ],
+  "risky_tlds": [
+    ".xyz", ".tk", ".ml", ".ga", ".cf", ".gq",
+    ".pw", ".top", ".club", ".click", ".link",
+    ".online", ".site", ".website", ".tech"
+  ]
+}

@@ -1,0 +1,32 @@
+# Runtime artifacts (screenshots, diffs, reports)
+artifacts/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+dist/
+build/
+
+# Playwright browsers
+backend/.playwright/
+
+# Environment
+.env
+*.env.local
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+
+# Test cache
+.pytest_cache/
+.mypy_cache/
+htmlcov/
+.coverage
