@@ -184,3 +184,28 @@ async def test_invalid_page_url_returns_unavailable():
 
     assert not result.available
     assert result.score == 0.0
+
+
+@pytest.mark.asyncio
+async def test_genuine_same_origin_http_password_form_warns_without_clone_score():
+    url = "http://localhost:5001/login"
+    form = make_form(
+        action="http://localhost:5001/login",
+        http=True,
+    )
+
+    result = await FormAnalyzer().analyze(
+        make_context(
+            url,
+            [form],
+            genuine_url=url,
+            genuine_forms=[form],
+        )
+    )
+
+    assert result.available
+    assert result.score == 0.0
+    assert any(
+        reason.code == "FORM_PASSWORD_HTTP"
+        for reason in result.reasons
+    )

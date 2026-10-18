@@ -138,14 +138,22 @@ class FormAnalyzer:
                 )
 
             if form.has_password and form.is_http:
-                score = max(score, 0.85)
+                # HTTP is a transport-security concern, not proof of cloning.
+                # Do not add clone-risk score when this form matches the genuine
+                # reference's password-form action on the same page origin.
+                matches_genuine_action = action_origin in genuine_password_actions
+                matches_genuine_origin = action_origin == page_origin
+                if not (matches_genuine_action and matches_genuine_origin):
+                    score = max(score, 0.85)
+
                 reasons.append(
                     _reason(
                         code="FORM_PASSWORD_HTTP",
                         title="Password form uses an insecure HTTP action",
                         detail=(
                             "The password form submits over unencrypted HTTP, "
-                            "so its data may be exposed in transit."
+                            "so its data may be exposed in transit. This is a "
+                            "transport-security warning, not proof of cloning."
                         ),
                         severity=Severity.high,
                         evidence=evidence,
