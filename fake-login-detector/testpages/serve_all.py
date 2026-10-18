@@ -28,6 +28,14 @@ PAGES = {
         "action": "/login",
         "color": "#174a82",
     },
+    5003: {
+        "title": "Northstar Learning Hub",
+        "heading": "Northstar Academy",
+        "subtitle": "Learner Sign In",
+        "button": "Continue",
+        "action": "/login",
+        "color": "#237547",
+    },
 }
 
 

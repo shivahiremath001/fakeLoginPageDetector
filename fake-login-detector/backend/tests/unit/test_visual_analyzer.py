@@ -82,3 +82,62 @@ async def test_same_origin_has_zero_clone_score(tmp_path):
 
     assert result.available
     assert result.score == 0.0
+
+
+@pytest.mark.asyncio
+async def test_similar_layout_with_different_colors_has_reduced_score(tmp_path):
+    genuine_path = make_screenshot(
+        tmp_path / "genuine.png", "white", "Sign in"
+    )
+    suspect_path = make_screenshot(
+        tmp_path / "suspect.png", "navy", "Sign in"
+    )
+
+    ctx = ScanContext(
+        suspect=PageSnapshot(
+            requested_url="https://copy.example.test",
+            screenshot_path=suspect_path,
+        ),
+        genuine=PageSnapshot(
+            requested_url="https://genuine.example.test",
+            screenshot_path=genuine_path,
+        ),
+    )
+
+    result = await VisualAnalyzer().analyze(ctx)
+
+    assert result.available
+    assert result.metrics["color_similarity"] < 0.5
+    assert result.metrics["color_reliability"] < 0.7
+    assert result.metrics["combined_similarity"] < (
+        result.metrics["structural_similarity_score"]
+    )
+    assert result.score < 0.85
+
+
+@pytest.mark.asyncio
+async def test_matching_screenshots_keep_high_score_after_color_adjustment(tmp_path):
+    genuine_path = make_screenshot(
+        tmp_path / "genuine.png", "white", "Sign in"
+    )
+    suspect_path = make_screenshot(
+        tmp_path / "suspect.png", "white", "Sign in"
+    )
+
+    ctx = ScanContext(
+        suspect=PageSnapshot(
+            requested_url="https://copy.example.test",
+            screenshot_path=suspect_path,
+        ),
+        genuine=PageSnapshot(
+            requested_url="https://genuine.example.test",
+            screenshot_path=genuine_path,
+        ),
+    )
+
+    result = await VisualAnalyzer().analyze(ctx)
+
+    assert result.available
+    assert result.metrics["color_similarity"] >= 0.95
+    assert result.metrics["color_reliability"] >= 0.95
+    assert result.score >= 0.85

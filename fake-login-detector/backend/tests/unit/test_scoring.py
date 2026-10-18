@@ -142,3 +142,51 @@ def test_no_available_signals_does_not_claim_page_is_safe():
     assert result.score == 0
     assert result.verdict == Verdict.unrelated
     assert "could not be assessed reliably" in result.summary
+
+
+def test_genuine_page_baseline_has_zero_risk():
+    """A genuine page compared with itself should not score as a clone."""
+    signals = {
+        "visual": make_signal("visual", 0.0),
+        "dom": make_signal("dom", 0.0),
+        "form": make_signal("form", 0.0),
+        "domain": make_signal("domain", 0.0),
+        "assets": make_signal("assets", 0.0),
+    }
+
+    result = compute_score(signals)
+
+    assert result.score == 0
+    assert result.verdict == Verdict.low_risk
+
+
+def test_strong_clone_evidence_produces_high_risk():
+    """Strong evidence across visual, DOM and form checks should score highly."""
+    signals = {
+        "visual": make_signal("visual", 1.0),
+        "dom": make_signal("dom", 1.0),
+        "form": make_signal("form", 0.95),
+        "domain": make_signal("domain", 0.0),
+        "assets": make_signal("assets", 0.0),
+    }
+
+    result = compute_score(signals)
+
+    assert result.score >= 70
+    assert result.verdict == Verdict.likely_clone
+
+
+def test_unrelated_page_similarity_does_not_automatically_mean_clone():
+    """Moderate similarity alone should not trigger a likely-clone verdict."""
+    signals = {
+        "visual": make_signal("visual", 0.3535),
+        "dom": make_signal("dom", 0.2714),
+        "form": make_signal("form", 0.0),
+        "domain": make_signal("domain", 0.0),
+        "assets": make_signal("assets", 0.0),
+    }
+
+    result = compute_score(signals)
+
+    assert result.score < 70
+    assert result.verdict != Verdict.likely_clone
