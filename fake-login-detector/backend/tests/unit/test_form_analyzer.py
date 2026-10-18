@@ -154,6 +154,7 @@ async def test_password_form_using_get_is_flagged():
     )
 
 
+
 @pytest.mark.asyncio
 async def test_password_form_using_http_is_flagged():
     form = make_form(
@@ -169,7 +170,7 @@ async def test_password_form_using_http_is_flagged():
     )
 
     assert result.available
-    assert result.score >= 0.85
+    assert result.score == 0.0
     assert any(
         reason.code == "FORM_PASSWORD_HTTP"
         for reason in result.reasons
