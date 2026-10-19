@@ -545,6 +545,7 @@ class PageFetcher:
                             "height": candidate["height"],
                         }
                         logo_candidates.append({
+                            "path": candidate["src"],
                             "src": candidate["src"],
                             "alt": candidate["alt"],
                             "box": box,
