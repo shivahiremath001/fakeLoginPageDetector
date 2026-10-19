@@ -352,7 +352,10 @@ async def test_browser_route_blocks_private_redirects_and_subresources(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     async def allow_only_public_example(url: str) -> None:
-        if url != "https://public.example/login":
+        if url not in {
+            "https://public.example/login",
+            "https://public.example/logo.png",
+        }:
             raise ValueError("Private or non-public destination addresses are not allowed.")
 
     context = FakeContext(FakePage())
@@ -370,25 +373,42 @@ async def test_browser_route_blocks_private_redirects_and_subresources(
     assert browser.service_workers == "block"
 
     class FakeRoute:
-        def __init__(self, url: str) -> None:
+        def __init__(
+            self,
+            url: str,
+            resource_type: str = "document",
+        ) -> None:
             self.request = FakeRequest(url)
+            self.request.resource_type = resource_type
             self.aborted_with: str | None = None
+            self.continued = False
 
         async def abort(self, error_code: str = "blockedbyclient") -> None:
             self.aborted_with = error_code
 
         async def continue_(self) -> None:
-            raise AssertionError("Unsafe request must not be continued.")
+            self.continued = True
 
     handler = context.route_handler
+
     redirect = FakeRoute("http://10.0.0.1/admin")
-    image = FakeRoute("http://192.168.1.1/metadata")
+    private_image = FakeRoute(
+        "http://192.168.1.1/metadata",
+        resource_type="image",
+    )
+    safe_image = FakeRoute(
+        "https://public.example/logo.png",
+        resource_type="image",
+    )
 
     await handler(redirect)
-    await handler(image)
+    await handler(private_image)
+    await handler(safe_image)
 
     assert redirect.aborted_with == "blockedbyclient"
-    assert image.aborted_with == "blockedbyclient"
+    assert private_image.aborted_with == "blockedbyclient"
+    assert safe_image.aborted_with is None
+    assert safe_image.continued is True
 
     class FakeWebSocketRoute:
         def __init__(self, url: str) -> None:

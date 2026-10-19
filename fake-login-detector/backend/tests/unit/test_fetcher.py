@@ -38,6 +38,12 @@ async def test_local_page_capture(tmp_path, monkeypatch):
               <head><title>Test Login Page</title></head>
               <body>
                 <h1>Welcome</h1>
+                <img
+                    src="/logo.svg"
+                    alt="Test Company Logo"
+                    width="120"
+                    height="60"
+                />
                 <form action="/login" method="post">
                   <input name="username">
                   <input type="password" name="password">
@@ -88,12 +94,32 @@ async def test_fetch_captures_local_page(tmp_path, monkeypatch):
 
     class Handler(BaseHTTPRequestHandler):
         def do_GET(self):
+            if self.path == "/logo.svg":
+                body = b"""
+                <svg xmlns="http://www.w3.org/2000/svg"
+                     width="120" height="60">
+                  <rect width="120" height="60" fill="blue"/>
+                  <text x="10" y="35" fill="white">TEST LOGO</text>
+                </svg>
+                """
+                self.send_response(200)
+                self.send_header("Content-Type", "image/svg+xml")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+                return
             body = b"""
             <!doctype html>
             <html>
               <head><title>Local Test Login</title></head>
               <body>
-                <h1>Welcome</h1>
+              <h1>Welcome</h1>
+              <img
+                src="/logo.svg"
+                alt="Test Company Logo"
+                width="120"
+                height="60"
+                />
                 <form action="/login" method="post">
                   <input name="username">
                   <input type="password" name="password">
@@ -133,6 +159,10 @@ async def test_fetch_captures_local_page(tmp_path, monkeypatch):
         assert result.forms[0].has_password is True
         assert result.screenshot_path is not None
         assert __import__("pathlib").Path(result.screenshot_path).exists()
+        assert any(
+            candidate.get("alt") == "Test Company Logo"
+            for candidate in result.logo_candidates
+        )
     finally:
         await fetcher.shutdown()
         server.shutdown()

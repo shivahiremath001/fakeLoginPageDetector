@@ -326,14 +326,11 @@ class PageFetcher:
                 page = await context.new_page()
                 page.set_default_navigation_timeout(settings.page_timeout_ms)
                 page.set_default_timeout(settings.page_timeout_ms)
-
                 async def guard_request(route) -> None:
                     request = route.request
 
-                    if request.resource_type in _IGNORED_RESOURCE_TYPES:
-                        await route.abort()
-                        return
-
+                    # Validate every destination before allowing the request,
+                    # including images, media, fonts, redirects, and frames.
                     if not settings.allow_private_hosts:
                         try:
                             await _validate_public_url(request.url)
@@ -342,6 +339,7 @@ class PageFetcher:
                             return
 
                     await route.continue_()
+
 
                 # Context-level routing covers navigations and subresources,
                 # including requests initiated by child frames.
