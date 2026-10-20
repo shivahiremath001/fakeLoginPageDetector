@@ -337,6 +337,10 @@ class Orchestrator:
                         "suspect_url": (
                             suspect.final_url or suspect.requested_url
                         ),
+                        "genuine_url": (
+                            (genuine.final_url or genuine.requested_url)
+                            if genuine else None
+                        ),
                         "brand": brand.name if brand else None,
                         "images": images,
                         "form_comparison": self._make_form_comparison(

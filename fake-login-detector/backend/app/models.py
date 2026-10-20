@@ -269,6 +269,7 @@ class ScanResult(BaseModel):
     created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
     duration_ms: int = 0
     suspect_url: str = ""
+    genuine_url: Optional[str] = None
     brand: Optional[str] = None
     score: int = Field(ge=0, le=100, default=0)
     verdict: Verdict = Verdict.unrelated

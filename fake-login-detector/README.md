@@ -1,114 +1,139 @@
 # Fake Login Page Detector
 
-> Hackathon entry — October 2026  
-> **Catches phishing clone pages in < 8 seconds, with explainable evidence.**
+A web-based phishing detection tool that identifies suspicious login pages by comparing them with genuine pages and presenting explainable evidence.
 
-## What it does
+## Features
 
-Takes a suspect URL, finds the genuine page it may be imitating, compares the two, and returns:
-- A **clone-likelihood score** (0–100) and a verdict
-- A **side-by-side screenshot comparison** with a diff overlay
-- **Structured reasons**: domain lookalike, copied HTML, foreign form action, hotlinked assets, logo match
+- Clone-likelihood score and risk verdict
+- Genuine-versus-suspect page comparison
+- Screenshot and visual difference analysis
+- Domain, HTML, form-action, and asset evidence
+- JSON and PDF report exports
 
-## Architecture
+## Technology Stack
 
+- **Backend:** Python, FastAPI, Playwright
+- **Frontend:** HTML, CSS, JavaScript
+- **Analysis:** Domain, form, DOM, visual, and asset analyzers
+- **Testing:** pytest
+
+## Requirements
+
+- Python 3.13 recommended
+- Git
+- Internet access to install Python dependencies and the Playwright browser
+
+## Setup on Windows
+
+### 1. Clone the repository
+
+```bat
+git clone -b integration/shared-fetcher https://github.com/shivahiremath001/fakeLoginPageDetector.git
+cd fakeLoginPageDetector
 ```
-browser → Playwright fetcher → PageSnapshot
-                                    ↓
-              ┌─────────────────────────────────────┐
-              │  Five independent analyzers          │
-              │  domain | form | dom | visual | assets│
-              └────────────────────┬────────────────-┘
-                                   ↓
-                           scoring.py (weighted, overrides)
-                                   ↓
-                           ScanResult → API → UI / Extension
-```
 
-## Quick Start
+### 2. Create and activate a virtual environment
 
-```bash
-cd fake-login-detector/backend
-
-# 1. Create and activate virtual environment
+```bat
+cd backend
 python -m venv .venv
-.venv\Scripts\activate        # Windows
-# source .venv/bin/activate   # macOS/Linux
-
-# 2. Install dependencies
-pip install -r requirements.txt
-
-# 3. Install Playwright browser
-playwright install chromium
-
-# 4. Start the server
-python -m app.main
-# → http://localhost:8000
-# → http://localhost:8000/api/health
-```
-
-## Running Tests
-
-```bash
-cd fake-login-detector/backend
 .venv\Scripts\activate
-pytest tests/ -v
 ```
 
-## Test Pages (Phase 4+)
+### 3. Install dependencies and the browser
 
-Start all 10 test pages:
-
-```bash
-cd fake-login-detector/testpages
-python serve_all.py
+```bat
+python -m pip install --upgrade pip
+pip install -r requirements.txt
+python -m playwright install chromium
 ```
 
-Pages run on ports 5001–5010. Register the ports in your `hosts` file for
-lookalike-domain realism (optional, documented in `testpages/README.md`).
+### 4. Start the backend
 
-## Build Phases
+From the `backend` directory, run:
 
-| Phase | Status | Description |
-|-------|--------|-------------|
-| 0 | ✅ Done | Scaffold, models, config, URL utils, confusables, Analyzer protocol |
-| 1 | ⏳ | Domain + form analyzers, brand registry, 30 unit tests |
-| 2 | ⏳ | Playwright fetcher, DOM analyzer, genuine-snapshot cache |
-| 3 | ⏳ | Visual + assets analyzers, scoring, orchestrator, full API |
-| 4 | ⏳ | 10 test pages, e2e tests, calibration script |
-| 5 | ⏳ | Vanilla JS frontend (gauge, slider, reasons, breakdown, attack-path) |
-| 6 | ⏳ | Manifest V3 extension (3 tiers + warning page) |
-| 7 | ⏳ | Wow features: diff slider polish, PDF report, honeypot, optional AI summary |
-| 8 | ⏳ | Hardening, prewarm script, one-command start, demo checklist |
-
-## Repository Layout
-
-```
-fake-login-detector/
-  backend/
-    app/           # FastAPI app, analyzers, utils
-    config/        # brands.json, scoring.json
-    tests/         # unit + e2e + fixtures
-    scripts/       # calibrate.py, prewarm.py
-    requirements.txt
-  frontend/        # Vanilla HTML/CSS/JS (Phase 5)
-  extension/       # Manifest V3 extension (Phase 6)
-  shared/          # domain_test_vectors.json (parity between Python + JS)
-  testpages/       # 10 local test pages served on ports 5001–5010 (Phase 4)
-  artifacts/       # Runtime screenshots, diffs, reports (gitignored)
+```bat
+python -m uvicorn app.main:app
 ```
 
-## Configuration
+The API will be available at:
 
-All tunable values live in `backend/config/scoring.json` and `backend/app/config.py`.
-No magic numbers in analyzer code.
+- API: http://127.0.0.1:8000
+- API documentation: http://127.0.0.1:8000/docs
 
-Feature flags (set via environment variable or `.env`):
-- `FAKELD_ENABLE_WHOIS=true` — domain age check (requires internet)
-- `FAKELD_ENABLE_VIRUSTOTAL=true` — VirusTotal reputation (requires API key)
-- `FAKELD_ENABLE_AI_SUMMARY=true` — LLM summary (requires API key)
+Keep this terminal open.
 
-## Hackathon Pitch
+### 5. Start the frontend
 
-> "An attacker cloned our portal 10 minutes ago and VirusTotal knows nothing.  
->  Here is how we caught it in 8 seconds — and exactly why."
+Open a second terminal:
+
+```bat
+cd fakeLoginPageDetector\frontend
+python -m http.server 8080
+```
+
+Open http://localhost:8080 in your browser.
+
+Keep this terminal open as well.
+
+### 6. Start the local demo pages
+
+Open a third terminal from the repository root:
+
+```bat
+cd fakeLoginPageDetector
+python testpages\serve_all.py
+```
+
+The current demo server provides these local pages:
+
+- Genuine login page: http://localhost:5001/login
+- Clone login page: http://localhost:5002/login
+- Unrelated page: http://localhost:5003/login
+- Form target: http://localhost:5006/submit
+
+Keep this terminal open while testing.
+
+## Run the tests
+
+Open a terminal and run:
+
+```bat
+cd fakeLoginPageDetector\backend
+.venv\Scripts\activate
+python -m pytest tests\unit -q
+```
+
+## Project Structure
+
+```text
+fakeLoginPageDetector/
+├── backend/
+│   ├── app/
+│   │   ├── analyzers/
+│   │   ├── utils/
+│   │   ├── fetcher.py
+│   │   ├── main.py
+│   │   ├── orchestrator.py
+│   │   └── scoring.py
+│   ├── config/
+│   ├── tests/
+│   └── requirements.txt
+├── frontend/
+│   ├── images/
+│   ├── index.html
+│   ├── Styles.css
+│   └── JavaScript modules
+├── shared/
+│   └── domain_test_vectors.json
+└── testpages/
+    └── serve_all.py
+```
+
+## Safety Notice
+
+Use this tool only with URLs you are authorized to test. The local demo pages are provided for controlled testing. A risk score is an indicator, not a guarantee that a page is safe or malicious.
+
+## Current Test Status
+
+The project unit tests passed locally: **143 passed**.

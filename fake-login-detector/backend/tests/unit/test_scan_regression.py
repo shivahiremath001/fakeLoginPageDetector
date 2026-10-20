@@ -36,7 +36,6 @@ CASES = [
         id="genuine-page-compared-with-itself",
     ),
 ]
-
 @pytest.fixture(autouse=True)
 async def browser_lifecycle():
     """Start and stop Playwright within each test's event loop."""
