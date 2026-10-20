@@ -27,7 +27,8 @@ def test_all_zero_scores_produce_low_risk():
     result = compute_score(signals)
 
     assert result.score == 0
-    assert result.verdict == Verdict.low_risk
+    assert result.verdict == Verdict.unrelated
+    assert "Insufficient evidence" in result.summary
     assert len(result.signals) == 5
 
 
@@ -141,8 +142,7 @@ def test_no_available_signals_does_not_claim_page_is_safe():
 
     assert result.score == 0
     assert result.verdict == Verdict.unrelated
-    assert "could not be assessed reliably" in result.summary
-
+    assert "Insufficient evidence" in result.summary
 
 def test_genuine_page_baseline_has_zero_risk():
     """A genuine page compared with itself should not score as a clone."""
@@ -157,8 +157,8 @@ def test_genuine_page_baseline_has_zero_risk():
     result = compute_score(signals)
 
     assert result.score == 0
-    assert result.verdict == Verdict.low_risk
-
+    assert result.verdict == Verdict.unrelated
+    assert "Insufficient evidence" in result.summary
 
 def test_strong_clone_evidence_produces_high_risk():
     """Strong evidence across visual, DOM and form checks should score highly."""

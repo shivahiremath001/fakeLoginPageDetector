@@ -1,102 +1,212 @@
 
-"""
-scoring.py — Weighted score computation and verdict assignment.
-"""
 from __future__ import annotations
 
-import logging
+from typing import Dict, List, Optional, Tuple
 
-from app.models import Reason, ScanResult, ScanSettings, SignalResult, Verdict
-
-logger = logging.getLogger(__name__)
-
-SIGNAL_WEIGHTS = {
-    "visual": "weight_visual",
-    "dom": "weight_dom",
-    "form": "weight_form",
-    "domain": "weight_domain",
-    "assets": "weight_assets",
-}
+from app.models import (
+    Reason,
+    ScanResult,
+    ScanSettings,
+    SignalResult,
+    Verdict,
+)
 
 
-def _fallback_result() -> ScanResult:
-    """Return a safe result if scoring encounters an unexpected error."""
-    return ScanResult(
-        score=0,
-        verdict=Verdict.unrelated,
-        summary="The scan score could not be calculated reliably.",
+def _reason_key(reason: Reason) -> Tuple[str, str, str]:
+    """Build a stable key for deduplicating reasons."""
+    return (
+        str(getattr(reason, "code", "")),
+        str(getattr(reason, "title", "")),
+        str(getattr(reason, "description", "")),
+    )
+
+
+def _severity_value(reason: Reason) -> int:
+    """Convert a reason's severity into a sortable numeric value."""
+    severity = getattr(reason, "severity", 0)
+
+    if isinstance(severity, (int, float)):
+        return int(severity)
+
+    severity_map = {
+        "critical": 5,
+        "high": 4,
+        "medium": 3,
+        "low": 2,
+        "info": 1,
+        "informational": 1,
+    }
+
+    return severity_map.get(str(severity).lower(), 0)
+
+
+def _combine_reasons(
+    signals: Dict[str, SignalResult],
+) -> List[Reason]:
+    """Combine reasons from all signals, remove duplicates, and sort."""
+    unique_reasons: Dict[Tuple[str, str, str], Reason] = {}
+
+    for signal in signals.values():
+        for reason in signal.reasons:
+            key = _reason_key(reason)
+
+            existing = unique_reasons.get(key)
+            if existing is None or _severity_value(reason) > _severity_value(existing):
+                unique_reasons[key] = reason
+
+    return sorted(
+        unique_reasons.values(),
+        key=lambda reason: (
+            -_severity_value(reason),
+            str(getattr(reason, "code", "")),
+            str(getattr(reason, "title", "")),
+        ),
     )
 
 
 def compute_score(
-    signals: dict[str, SignalResult],
-    scan_settings: ScanSettings | None = None,
+    signals: Dict[str, SignalResult],
+    settings: Optional[ScanSettings] = None,
 ) -> ScanResult:
     """
-    Combine available analyzer scores into a 0–100 clone-likelihood score.
+    Calculate an overall clone-risk score from available analyzer signals.
 
-    Unavailable analyzers are excluded and the remaining weights are
-    normalized. This avoids treating a failed analyzer as evidence of safety.
+    Signal scores are expected to be normalized between 0.0 and 1.0.
+    Unavailable signals do not contribute to the score. The remaining
+    signal weights are normalized so their total contribution remains
+    comparable when one or more analyzers are unavailable.
     """
-    try:
-        config = scan_settings or ScanSettings()
+    config = settings or ScanSettings()
 
-        configured_weights = {
-            name: max(0.0, float(getattr(config, setting_name)))
-            for name, setting_name in SIGNAL_WEIGHTS.items()
-        }
+    configured_weights = getattr(config, "weights", {}) or {}
 
-        active_weight_total = sum(
-            configured_weights.get(name, 0.0)
-            for name, signal in signals.items()
-            if signal.available
+    # Default weights are used only when settings do not provide a weight
+    # for a signal. Adjust these defaults to match your ScanSettings model.
+    default_weights = {
+        "visual": 0.30,
+        "dom": 0.25,
+        "form": 0.25,
+        "domain": 0.10,
+        "assets": 0.10,
+    }
+
+    available_signals: Dict[str, SignalResult] = {}
+    weights: Dict[str, float] = {}
+
+    for name, signal in signals.items():
+        if not signal.available:
+            continue
+
+        available_signals[name] = signal
+
+        configured_weight = configured_weights.get(
+            name,
+            default_weights.get(name, 0.0),
         )
 
-        scored_signals: dict[str, SignalResult] = {}
+        try:
+            weight = max(0.0, float(configured_weight))
+        except (TypeError, ValueError):
+            weight = 0.0
 
+        weights[name] = weight
+
+    total_weight = sum(weights.values())
+
+    # Prepare independent copies of the signal results with their
+    # effective weights and score contributions.
+    scored_signals: Dict[str, SignalResult] = {}
+
+    if total_weight > 0:
         for name, signal in signals.items():
-            updated = signal.model_copy(deep=True)
-
-            if not signal.available or active_weight_total <= 0:
-                updated.weight_used = 0.0
-                updated.contribution = 0.0
-            else:
-                weight = configured_weights.get(name, 0.0) / active_weight_total
-                updated.weight_used = weight
-                updated.contribution = round(
-                    weight * signal.score * 100.0, 2
+            if name not in available_signals:
+                scored_signals[name] = signal.model_copy(
+                    update={
+                        "weight_used": 0.0,
+                        "contribution": 0.0,
+                    }
                 )
+                continue
 
-            scored_signals[name] = updated
+            normalized_weight = weights[name] / total_weight
+            normalized_score = max(0.0, min(1.0, float(signal.score)))
+            contribution = normalized_score * normalized_weight * 100.0
 
-        if active_weight_total <= 0:
-            return ScanResult(
-                score=0,
-                verdict=Verdict.unrelated,
-                summary=(
-                    "No analyzers produced usable results. "
-                    "The page could not be assessed reliably."
-                ),
-                signals=scored_signals,
-                reasons=[],
+            scored_signals[name] = signal.model_copy(
+                update={
+                    "weight_used": normalized_weight,
+                    "contribution": contribution,
+                }
+            )
+    else:
+        for name, signal in signals.items():
+            scored_signals[name] = signal.model_copy(
+                update={
+                    "weight_used": 0.0,
+                    "contribution": 0.0,
+                }
             )
 
-        raw_score = sum(
-            signal.contribution for signal in scored_signals.values()
+    score = 0
+
+    if total_weight > 0:
+        score = round(
+            sum(
+                max(0.0, min(1.0, float(signal.score)))
+                * weights[name]
+                / total_weight
+                * 100.0
+                for name, signal in available_signals.items()
+            )
         )
-        score = max(0, min(100, round(raw_score)))
 
-        if score >= config.threshold_suspicious:
-            verdict = Verdict.likely_clone
+    score = max(0, min(100, score))
+    reasons = _combine_reasons(scored_signals)
+
+    # No usable analyzer results means there is not enough information
+    # to assess whether the page is a clone.
+    if not available_signals or total_weight <= 0:
+        verdict = Verdict.unrelated
+        summary = (
+            "Insufficient evidence to assess whether this page "
+            "is a phishing clone. The page could not be assessed "
+            "reliably. This does not mean the page is safe."
+        )
+
+    elif score >= config.threshold_suspicious:
+        verdict = Verdict.likely_clone
+        summary = (
+            "Strong similarity or other risk indicators suggest "
+            "this page may be a phishing clone. Review the evidence "
+            "before interacting with it."
+        )
+
+    elif score >= config.threshold_low_risk:
+        verdict = Verdict.suspicious
+
+        if len(available_signals) < len(signals):
             summary = (
-                "The page has strong indicators of being a cloned "
-                "or impersonating login page."
+                "Suspicious indicators were found, but the assessment "
+                "has partial evidence because some analyzers were unavailable. "
+                "Review the evidence before trusting this page."
             )
-        elif score >= config.threshold_low_risk:
-            verdict = Verdict.suspicious
+        else:
             summary = (
-                "The page has some suspicious indicators. "
+                "The page has some indicators that may warrant caution. "
                 "Review the evidence before trusting it."
+            )
+
+    else:
+        # A low score without specific findings is inconclusive,
+        # not proof that the website is safe.
+        has_evidence = bool(reasons)
+
+        if not has_evidence:
+            verdict = Verdict.unrelated
+            summary = (
+                "Insufficient evidence to establish whether this page "
+                "is a phishing clone. No specific findings were returned. "
+                "This does not mean the page is safe."
             )
         else:
             verdict = Verdict.low_risk
@@ -105,53 +215,10 @@ def compute_score(
                 "This does not guarantee that the page is safe."
             )
 
-        # Combine evidence, prioritizing more serious findings.
-        severity_order = {
-            "critical": 5,
-            "high": 4,
-            "medium": 3,
-            "low": 2,
-            "info": 1,
-        }
-
-        reasons: list[Reason] = []
-        seen_codes: set[tuple[str, str]] = set()
-
-        for signal in scored_signals.values():
-            for reason in signal.reasons:
-                key = (reason.signal, reason.code)
-                if key not in seen_codes:
-                    seen_codes.add(key)
-                    reasons.append(reason)
-
-        reasons.sort(
-            key=lambda reason: (
-                severity_order.get(reason.severity.value, 0),
-                scored_signals.get(
-                    reason.signal, SignalResult(name=reason.signal, score=0)
-                ).weight_used,
-            ),
-            reverse=True,
-        )
-
-        unavailable = [
-            name for name, signal in scored_signals.items()
-            if not signal.available
-        ]
-        if unavailable:
-            summary += (
-                f" {len(unavailable)} analyzer(s) were unavailable, "
-                "so the result is based on partial evidence."
-            )
-
-        return ScanResult(
-            score=score,
-            verdict=verdict,
-            summary=summary,
-            signals=scored_signals,
-            reasons=reasons,
-        )
-
-    except Exception:
-        logger.exception("Failed to compute scan score")
-        return _fallback_result()
+    return ScanResult(
+        score=score,
+        verdict=verdict,
+        summary=summary,
+        signals=scored_signals,
+        reasons=reasons,
+    )
