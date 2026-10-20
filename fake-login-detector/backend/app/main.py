@@ -14,9 +14,15 @@ Shutdown:
 """
 from __future__ import annotations
 
+import asyncio
 import logging
+import sys
 import time
 import uuid
+
+if sys.platform == "win32":
+    asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
+
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
@@ -202,8 +208,12 @@ def _register_routes(app: FastAPI) -> None:
         Inputs:  QuickCheckRequest body
         Outputs: QuickCheckResult
         """
-        from app.utils.urls import normalize_url, origin_key
-        from app.registry import find_brand_by_origin
+        from app.utils.urls import normalize_url, origin_key, resolve_action
+        from app.registry import find_brand_by_origin, match_brand
+        from app.analyzers.domain import DomainAnalyzer
+        from app.analyzers.form import FormAnalyzer
+        from app.scoring import compute_score
+        from app.models import PageSnapshot, FormInfo, ScanContext, ScanSettings
 
         normalized = normalize_url(request.url)
         if not normalized:
@@ -213,15 +223,63 @@ def _register_routes(app: FastAPI) -> None:
         brand = find_brand_by_origin(origin)
 
         # Same-origin short circuit
-        if brand and origin in brand.origins:
+        if brand and (origin in brand.origins or origin in brand.trusted_related_origins):
             return QuickCheckResult(
                 verdict=Verdict.genuine,
                 score=0,
                 brand=brand.name,
             )
 
-        # Phase 1 will add real domain + form scoring here
-        return QuickCheckResult(verdict=Verdict.unrelated, score=0)
+        # If origin not directly in brand registry, try matching by URL / lookalike
+        if not brand:
+            brand = match_brand(normalized)
+
+        # Build FormInfo objects from form_actions
+        forms: list[FormInfo] = []
+        for action in request.form_actions:
+            resolved = resolve_action(action, normalized)
+            action_orig = origin_key(resolved) if resolved else ""
+            is_cross = bool(action_orig and action_orig != origin)
+            is_http = resolved.lower().startswith("http://") if resolved else False
+            forms.append(
+                FormInfo(
+                    action_raw=action,
+                    action_resolved=resolved,
+                    action_origin=action_orig,
+                    method="post",
+                    has_password=request.has_password,
+                    is_cross_origin=is_cross,
+                    is_http=is_http,
+                )
+            )
+
+        suspect_snapshot = PageSnapshot(
+            requested_url=normalized,
+            final_url=normalized,
+            forms=forms,
+        )
+
+        ctx = ScanContext(
+            suspect=suspect_snapshot,
+            genuine=None,
+            brand=brand,
+            settings=ScanSettings(),
+        )
+
+        domain_signal = await DomainAnalyzer().analyze(ctx)
+        form_signal = await FormAnalyzer().analyze(ctx)
+
+        scored = compute_score(
+            {"domain": domain_signal, "form": form_signal},
+            settings=ScanSettings(),
+        )
+
+        return QuickCheckResult(
+            verdict=scored.verdict,
+            score=scored.score,
+            reasons=scored.reasons,
+            brand=brand.name if brand else None,
+        )
 
     # ── Reports ──────────────────────────────────────────────────────────────
 
@@ -245,10 +303,13 @@ def _register_routes(app: FastAPI) -> None:
 
         pdf_path = _ARTIFACTS_DIR / scan_id / "report.pdf"
         if not pdf_path.exists():
-            raise HTTPException(
-                status_code=503,
-                detail={"code": "PDF_NOT_READY", "message": "PDF generation not yet implemented."},
-            )
+            from app.report import generate_pdf
+            success = await generate_pdf(result, str(pdf_path))
+            if not success or not pdf_path.exists():
+                raise HTTPException(
+                    status_code=500,
+                    detail={"code": "PDF_FAILED", "message": "Could not generate PDF report."},
+                )
         return FileResponse(
             path=str(pdf_path),
             media_type="application/pdf",

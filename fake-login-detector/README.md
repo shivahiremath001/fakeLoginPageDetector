@@ -63,18 +63,15 @@ The API will be available at:
 
 Keep this terminal open.
 
-### 5. Start the frontend
+### 5. Access the frontend
 
-Open a second terminal:
+The frontend is served directly by the FastAPI backend at:
 
-```bat
-cd fakeLoginPageDetector\frontend
-python -m http.server 8080
+```
+http://localhost:8000
 ```
 
-Open http://localhost:8080 in your browser.
-
-Keep this terminal open as well.
+(Alternatively, you can run `python -m http.server 8080` from the `frontend/` directory).
 
 ### 6. Start the local demo pages
 

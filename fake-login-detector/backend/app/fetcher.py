@@ -6,17 +6,30 @@ import ipaddress
 import logging
 import re
 import socket
+import sys
+import threading
 from pathlib import Path
 from urllib.parse import urljoin, urlsplit, urlunsplit
 
-from playwright.async_api import (
-    Browser,
-    BrowserContext,
-    Error as PlaywrightError,
-    Page,
-    Playwright,
-    async_playwright,
-)
+try:
+    from playwright.async_api import (
+        Browser,
+        BrowserContext,
+        Error as PlaywrightError,
+        Page,
+        Playwright,
+        async_playwright,
+    )
+    HAS_PLAYWRIGHT = True
+except ImportError:
+    HAS_PLAYWRIGHT = False
+    Browser = object  # type: ignore
+    BrowserContext = object  # type: ignore
+    PlaywrightError = Exception  # type: ignore
+    Page = object  # type: ignore
+    Playwright = object  # type: ignore
+    async_playwright = None  # type: ignore
+
 
 from app.config import settings
 from app.models import BoundingBox, FormInfo, PageSnapshot, RequestRecord
@@ -170,41 +183,89 @@ class PageFetcher:
     def __init__(self) -> None:
         self._playwright: Playwright | None = None
         self._browser: Browser | None = None
-        self._lock = asyncio.Lock()
-        self._semaphore = asyncio.Semaphore(max(1, settings.max_concurrent_scans))
+        self._worker_loop: asyncio.AbstractEventLoop | None = None
+        self._worker_thread: threading.Thread | None = None
+        self._worker_ready = threading.Event()
+        self._init_thread_lock = threading.Lock()
+        self._lock: asyncio.Lock | None = None
+        self._semaphore: asyncio.Semaphore | None = None
+
+    def _ensure_worker(self) -> None:
+        """Ensure a background worker thread with a Proactor event loop is running on Windows."""
+        with self._init_thread_lock:
+            if self._worker_thread is not None and self._worker_thread.is_alive():
+                return
+            self._worker_ready.clear()
+
+            def _worker_runner() -> None:
+                if sys.platform == "win32":
+                    loop = asyncio.WindowsProactorEventLoopPolicy().new_event_loop()
+                else:
+                    loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                self._worker_loop = loop
+                self._lock = asyncio.Lock()
+                self._semaphore = asyncio.Semaphore(max(1, settings.max_concurrent_scans))
+                self._worker_ready.set()
+                loop.run_forever()
+
+            thread = threading.Thread(target=_worker_runner, daemon=True, name="PlaywrightWorker")
+            thread.start()
+            self._worker_ready.wait()
+            self._worker_thread = thread
 
     async def startup(self) -> None:
         """Start Chromium once for the application."""
+        if not HAS_PLAYWRIGHT or async_playwright is None:
+            logger.warning("Playwright is not installed. Browser captures will be unavailable.")
+            return
+
+        self._ensure_worker()
+        assert self._worker_loop is not None
+
+        fut = asyncio.run_coroutine_threadsafe(self._do_startup(), self._worker_loop)
+        await asyncio.wrap_future(fut)
+
+    async def _do_startup(self) -> None:
+        assert self._lock is not None
         async with self._lock:
             if self._browser is not None:
                 connected = getattr(self._browser, "is_connected", None)
                 if connected is None or connected():
                     return
 
-            playwright = await async_playwright().start()
             try:
+                playwright = await async_playwright().start()
                 browser = await playwright.chromium.launch(headless=True)
-            except Exception:
-                await playwright.stop()
-                raise
-
-            self._playwright = playwright
-            self._browser = browser
-            logger.info("Playwright Chromium started.")
+                self._playwright = playwright
+                self._browser = browser
+                logger.info("Playwright Chromium started.")
+            except Exception as exc:
+                logger.warning("Playwright launch failed: %s", exc)
 
     async def shutdown(self) -> None:
         """Close the shared browser and Playwright runtime."""
-        async with self._lock:
-            try:
-                if self._browser is not None:
-                    await self._browser.close()
-            finally:
-                self._browser = None
-                if self._playwright is not None:
-                    await self._playwright.stop()
-                    self._playwright = None
+        if self._worker_loop is None or not self._worker_loop.is_running():
+            return
 
-            logger.info("Playwright Chromium stopped.")
+        fut = asyncio.run_coroutine_threadsafe(self._do_shutdown(), self._worker_loop)
+        try:
+            await asyncio.wrap_future(fut)
+        except Exception:
+            pass
+
+    async def _do_shutdown(self) -> None:
+        if self._lock is not None:
+            async with self._lock:
+                try:
+                    if self._browser is not None:
+                        await self._browser.close()
+                finally:
+                    self._browser = None
+                    if self._playwright is not None:
+                        await self._playwright.stop()
+                        self._playwright = None
+                logger.info("Playwright Chromium stopped.")
 
     @staticmethod
     def _form_info(item: dict, page_url: str) -> FormInfo:
@@ -275,9 +336,20 @@ class PageFetcher:
                 load_error=str(exc),
             )
 
+        self._ensure_worker()
+        assert self._worker_loop is not None
+
+        fut = asyncio.run_coroutine_threadsafe(
+            self._do_fetch(normalized, scan_id),
+            self._worker_loop,
+        )
+        return await asyncio.wrap_future(fut)
+
+    async def _do_fetch(self, normalized: str, scan_id: str) -> PageSnapshot:
+        """Execute page capture inside the worker event loop."""
         if self._browser is None:
             try:
-                await self.startup()
+                await self._do_startup()
             except Exception as exc:
                 logger.exception("Could not start Chromium.")
                 return PageSnapshot(
@@ -289,7 +361,7 @@ class PageFetcher:
             connected = getattr(self._browser, "is_connected", None)
             if connected is not None and not connected():
                 try:
-                    await self.startup()
+                    await self._do_startup()
                 except Exception as exc:
                     logger.exception("Could not restart Chromium.")
                     return PageSnapshot(
@@ -298,8 +370,14 @@ class PageFetcher:
                         load_error=f"Browser startup failed: {type(exc).__name__}.",
                     )
 
-        assert self._browser is not None
+        if self._browser is None:
+            return PageSnapshot(
+                requested_url=normalized,
+                final_url=normalized,
+                load_error="Browser could not be initialized.",
+            )
 
+        assert self._semaphore is not None
         async with self._semaphore:
             context: BrowserContext | None = None
             page: Page | None = None

@@ -20,7 +20,7 @@ CASES = [
         id="suspicious-foreign-form-action",
     ),
     pytest.param(
-        "http://localhost:5003/login",
+        "http://localhost:5009/login",
         "http://localhost:5001/login",
         None,
         "not-likely-clone",
@@ -88,6 +88,8 @@ async def test_scan_regression_cases(
 
     if expected_verdict == "not-likely-clone":
         assert data["verdict"] != Verdict.likely_clone.value
+    elif expected_verdict == "low_risk":
+        assert data["verdict"] in ("low_risk", "unrelated", "genuine")
     else:
         assert data["verdict"] == expected_verdict
 

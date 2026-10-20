@@ -319,7 +319,23 @@ class Orchestrator:
                     time.perf_counter() - stage_started
                 )
 
+                self._set_progress(scan_id, "building_evidence")
+                stage_started = time.perf_counter()
+
+                form_comp = self._make_form_comparison(suspect, genuine)
+                action_target = form_comp.suspect_action if form_comp else None
+
+                from app.evidence import build_evidence
+                evidence_images = await build_evidence(
+                    scan_id=scan_id,
+                    suspect=suspect,
+                    genuine=genuine,
+                    action_target=action_target,
+                )
+                timings["evidence"] = time.perf_counter() - stage_started
+
                 images: dict[str, str] = {}
+                images.update(evidence_images)
 
                 if suspect.screenshot_path:
                     images["suspect"] = suspect.screenshot_path

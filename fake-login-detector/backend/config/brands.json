@@ -5,7 +5,7 @@
       "name": "Greenfield College Portal",
       "genuine_urls": ["http://localhost:5001/login"],
       "origins": ["localhost:5001"],
-      "trusted_related_origins": [],
+      "trusted_related_origins": ["localhost:5008"],
       "title_keywords": ["greenfield", "college", "portal", "student", "login"],
       "lookalike_labels": ["greenfield", "college"],
       "logo_phash": "",

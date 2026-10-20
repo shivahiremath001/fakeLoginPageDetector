@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Security Warning — Suspected Phishing Clone</title>
+  <link rel="stylesheet" href="warning.css">
+</head>
+<body>
+  <div class="background-glow" aria-hidden="true"></div>
+
+  <main class="warning-card">
+    <div class="warning-header">
+      <div class="shield-badge">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+          <path d="m9 12 2 2 4-4"/>
+        </svg>
+      </div>
+      <div>
+        <div class="verdict-pill" id="verdict-badge">CRITICAL WARNING</div>
+        <h1>Deceptive Login Page Blocked</h1>
+      </div>
+    </div>
+
+    <p class="warning-subtitle">
+      The website you attempted to visit is attempting to disguise itself as
+      <strong id="brand-name">a genuine organization</strong>. Entering passwords on this page may compromise your credentials.
+    </p>
+
+    <!-- Score & Brand Highlight Box -->
+    <div class="threat-matrix">
+      <div class="matrix-item">
+        <span class="matrix-label">Clone Risk Score</span>
+        <div class="matrix-value risk-high" id="risk-score">95 / 100</div>
+      </div>
+      <div class="matrix-item">
+        <span class="matrix-label">Targeted Brand</span>
+        <div class="matrix-value" id="target-brand">Greenfield College</div>
+      </div>
+    </div>
+
+    <!-- Domain Character Diff Highlight -->
+    <div class="domain-comparison-box">
+      <span class="section-title">Domain Lookalike Comparison</span>
+      <div class="domain-row">
+        <span class="domain-tag genuine">Genuine:</span>
+        <code class="domain-text" id="genuine-domain">portal.greenfield.edu</code>
+      </div>
+      <div class="domain-row">
+        <span class="domain-tag suspect">Suspect:</span>
+        <div class="diff-highlight-container" id="domain-diff-highlight">
+          <!-- Populated by warning.js with swapped characters highlighted in red -->
+        </div>
+      </div>
+    </div>
+
+    <!-- Top Detected Reasons -->
+    <div class="reasons-box">
+      <span class="section-title">Evidence & Analysis</span>
+      <ul class="reasons-list" id="reasons-list">
+        <!-- Injected via warning.js -->
+      </ul>
+    </div>
+
+    <!-- Action Buttons -->
+    <div class="actions-row">
+      <button class="btn btn-primary" id="btn-safety">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
+          <path d="M19 12H5M12 19l-7-7 7-7"/>
+        </svg>
+        <span>Go Back to Safety</span>
+      </button>
+
+      <a class="btn btn-secondary" id="btn-full-report" target="_blank" rel="noopener noreferrer" href="http://localhost:8000">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
+          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+          <polyline points="14 2 14 8 20 8"/>
+          <line x1="16" y1="13" x2="8" y2="13"/>
+          <line x1="16" y1="17" x2="8" y2="17"/>
+        </svg>
+        <span>View Full Analysis</span>
+      </a>
+
+      <button class="btn btn-danger-link" id="btn-proceed">
+        <span>Proceed anyway (unsafe)</span>
+      </button>
+    </div>
+
+    <!-- Second Confirmation Dialog for Proceed Anyway -->
+    <div class="confirm-dialog hidden" id="proceed-confirm">
+      <p>⚠️ <strong>Warning:</strong> You are about to send unencrypted login credentials to an unverified third party. Are you completely sure?</p>
+      <div class="confirm-buttons">
+        <button class="btn btn-sm btn-ghost" id="btn-cancel-proceed">Cancel</button>
+        <button class="btn btn-sm btn-danger" id="btn-confirm-proceed">I Understand the Risk — Proceed</button>
+      </div>
+    </div>
+  </main>
+
+  <script type="module" src="warning.js"></script>
+</body>
+</html>

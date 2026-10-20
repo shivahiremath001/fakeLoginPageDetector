@@ -69,7 +69,8 @@ function isOwnDetectorHomepage(url) {
 
     return (
       (hostname === "localhost" || hostname === "127.0.0.1") &&
-      parsed.port === "8080"
+      (parsed.port === "8080" || parsed.port === "8000") &&
+      (parsed.pathname === "/" || parsed.pathname === "")
     );
   } catch {
     return false;
@@ -337,3 +338,29 @@ button.addEventListener("click", async () => {
     button.textContent = "Scan";
   }
 });
+
+// Auto-populate inputs and trigger scan if query parameters are present (?url=... or ?target=...)
+function initFromUrlParams() {
+  const params = new URLSearchParams(window.location.search);
+  const targetUrl = params.get("url") || params.get("target");
+  const genuineUrl = params.get("genuine") || params.get("genuine_url");
+
+  if (targetUrl && input) {
+    input.value = targetUrl;
+    if (genuineUrl && genuineInput) {
+      genuineInput.value = genuineUrl;
+    }
+    setTimeout(() => {
+      if (button && !button.disabled) {
+        button.click();
+      }
+    }, 150);
+  }
+}
+
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", initFromUrlParams);
+} else {
+  initFromUrlParams();
+}
+
