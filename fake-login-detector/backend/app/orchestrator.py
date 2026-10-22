@@ -28,6 +28,7 @@ from app.models import (
 )
 from app.registry import match_brand
 from app.scoring import compute_score
+from app.evidence import build_evidence
 
 logger = logging.getLogger(__name__)
 
@@ -326,6 +327,17 @@ class Orchestrator:
 
                 if genuine and genuine.screenshot_path:
                     images["genuine"] = genuine.screenshot_path
+
+                if genuine and suspect.screenshot_path and genuine.screenshot_path:
+                    try:
+                        evidence = await build_evidence(
+                            scan_id,
+                            suspect.screenshot_path,
+                            genuine.screenshot_path,
+                        )
+                        images.update(evidence)
+                    except Exception:
+                        logger.exception("Failed to generate comparison evidence")
 
                 for name, signal in scored.signals.items():
                     for evidence_name, path in signal.evidence_files.items():
