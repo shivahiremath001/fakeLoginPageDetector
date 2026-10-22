@@ -97,6 +97,8 @@ class Settings(BaseSettings):
     risky_tlds: list[str] = Field(default_factory=list)
     whois_young_days: int = 30         # domains younger than this are suspicious
 
+    registry_admin_token: str = ""
+
     def model_post_init(self, __context: Any) -> None:  # noqa: ANN401
         """Merge values from scoring.json into this settings object."""
         scoring = _load_scoring_json()

@@ -1,26 +1,25 @@
 {
   "brands": [
     {
-      "id": "college_portal",
-      "name": "Greenfield College Portal",
-      "genuine_urls": ["http://localhost:5001/login"],
-      "origins": ["localhost:5001"],
+      "id": "college",
+      "name": "College",
+      "genuine_urls": [
+        "http://localhost:5004/login"
+      ],
+      "origins": [
+        "localhost:5004"
+      ],
       "trusted_related_origins": [],
-      "title_keywords": ["greenfield", "college", "portal", "student", "login"],
-      "lookalike_labels": ["greenfield", "college"],
+      "title_keywords": [
+        "college"
+      ],
+      "lookalike_labels": [
+        "college"
+      ],
       "logo_phash": "",
-      "aliases_for_local_testing": ["greenfield-college.test"]
-    },
-    {
-      "id": "college_webmail",
-      "name": "Greenfield Webmail",
-      "genuine_urls": ["http://localhost:5006/login"],
-      "origins": ["localhost:5006"],
-      "trusted_related_origins": ["localhost:5001"],
-      "title_keywords": ["greenfield", "webmail", "mail", "email", "login"],
-      "lookalike_labels": ["greenfield", "webmail"],
-      "logo_phash": "",
-      "aliases_for_local_testing": ["webmail.greenfield-college.test"]
+      "aliases_for_local_testing": [],
+      "organization_type": "College / University",
+      "verification_status": "verified"
     }
   ]
 }
