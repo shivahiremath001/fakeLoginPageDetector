@@ -163,27 +163,77 @@ def compute_score(
     score = max(0, min(100, score))
     reasons = _combine_reasons(scored_signals)
 
-    # No usable analyzer results means there is not enough information
-    # to assess whether the page is a clone.
-    if not available_signals or total_weight <= 0:
+    # ── Section 6.5: Rule-based Overrides R1 through R4 ───────────────────────
+    overrides_applied: list[str] = []
+
+    has_foreign_form = any(
+        r.code in ("FORM_PASSWORD_FOREIGN_ACTION", "FORM_FOREIGN_ACTION", "FORM_EXFILTRATION_JS")
+        for r in reasons
+    )
+    has_domain_skeleton = any(
+        r.code in ("DOMAIN_CONFUSABLE_BRAND", "DOMAIN_ALIAS_MATCH")
+        for r in reasons
+    )
+
+    # Compute similarity index among available similarity signals
+    sim_weights = {"visual": 0.50, "dom": 0.35, "assets": 0.15}
+    available_sim = [name for name in sim_weights if name in available_signals]
+    if available_sim:
+        sim_total = sum(sim_weights[name] for name in available_sim)
+        similarity_index = sum(
+            available_signals[name].score * sim_weights[name] / sim_total
+            for name in available_sim
+        )
+    else:
+        # When visual/dom are not run (fast mode), use 1.0 if foreign form present
+        similarity_index = 1.0 if has_foreign_form else 0.0
+
+    # R1: Same origin or trusted origin
+    if any(r.code in ("SAME_ORIGIN", "GENUINE_ORIGIN") for r in reasons):
+        score = 0
+        verdict = Verdict.genuine
+        overrides_applied.append("R1: Same origin or trusted related origin")
+
+    # R2: Foreign form action AND similarity index >= 0.60 (or fast mode)
+    elif has_foreign_form and (similarity_index >= 0.60 or not available_sim):
+        score = max(score, 88)
+        verdict = Verdict.likely_clone
+        overrides_applied.append("R2: Foreign form action stealing credentials")
+
+    # R3: Domain skeleton match AND similarity index >= 0.50
+    elif has_domain_skeleton and similarity_index >= 0.50:
+        score = max(score, 65)
+        verdict = Verdict.likely_clone
+        overrides_applied.append("R3: Domain skeleton match with high similarity")
+
+    # R4: Low similarity and no risk indicators
+    elif similarity_index < 0.20 and not has_domain_skeleton and not has_foreign_form and score <= 20:
+        score = min(score, 10)
         verdict = Verdict.unrelated
+        overrides_applied.append("R4: Low similarity and no risk indicators")
+
+    # Threshold-based verdict fallback if no override applied
+    elif score >= config.threshold_suspicious:
+        verdict = Verdict.likely_clone
+    elif score >= config.threshold_low_risk:
+        verdict = Verdict.suspicious
+    elif score > 0:
+        verdict = Verdict.low_risk
+    else:
+        verdict = Verdict.unrelated
+
+    # Summary text
+    if not available_signals or total_weight <= 0:
         summary = (
             "Insufficient evidence to assess whether this page "
             "is a phishing clone. The page could not be assessed "
             "reliably. This does not mean the page is safe."
         )
-
-    elif score >= config.threshold_suspicious:
-        verdict = Verdict.likely_clone
-        summary = (
-            "Strong similarity or other risk indicators suggest "
-            "this page may be a phishing clone. Review the evidence "
-            "before interacting with it."
-        )
-
-    elif score >= config.threshold_low_risk:
-        verdict = Verdict.suspicious
-
+    elif verdict == Verdict.genuine:
+        summary = "Verified genuine portal. Origin matches registered authentic organization."
+    elif verdict == Verdict.likely_clone:
+        summary = "Strong similarity or other risk indicators suggest this page may be a phishing clone. Review the evidence before interacting with it."
+    elif verdict == Verdict.suspicious:
         if len(available_signals) < len(signals):
             summary = (
                 "Suspicious indicators were found, but the assessment "
@@ -195,25 +245,23 @@ def compute_score(
                 "The page has some indicators that may warrant caution. "
                 "Review the evidence before trusting it."
             )
-
+    elif score == 0 and not reasons:
+        summary = (
+            "Insufficient evidence to assess whether this page "
+            "is a phishing clone. No specific findings were returned. "
+            "This does not mean the page is safe."
+        )
+    elif verdict == Verdict.low_risk:
+        summary = (
+            "The available checks found limited evidence of cloning. "
+            "This does not guarantee that the page is safe."
+        )
     else:
-        # A low score without specific findings is inconclusive,
-        # not proof that the website is safe.
-        has_evidence = bool(reasons)
-
-        if not has_evidence:
-            verdict = Verdict.unrelated
-            summary = (
-                "Insufficient evidence to establish whether this page "
-                "is a phishing clone. No specific findings were returned. "
-                "This does not mean the page is safe."
-            )
-        else:
-            verdict = Verdict.low_risk
-            summary = (
-                "The available checks found limited evidence of cloning. "
-                "This does not guarantee that the page is safe."
-            )
+        summary = (
+            "Insufficient evidence to assess whether this page "
+            "is a phishing clone. The page could not be assessed "
+            "reliably. This does not mean the page is safe."
+        )
 
     return ScanResult(
         score=score,

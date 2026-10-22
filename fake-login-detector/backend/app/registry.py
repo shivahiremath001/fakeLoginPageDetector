@@ -62,7 +62,6 @@ def find_brand_by_origin(origin: str) -> Optional[Brand]:
 
     return None
 
-# Full brand matching (score-based) will be implemented in Phase 1.
 def match_brand(
     suspect_url: str,
     title: str = "",
@@ -71,16 +70,68 @@ def match_brand(
 ) -> Optional[Brand]:
     """
     Score each brand and return the best match if its score >= 0.5.
-
-    Full implementation in Phase 1.
     """
+    from urllib.parse import urlparse
     from app.utils.urls import origin_key as _origin_key
+    from app.utils.confusables import skeleton
 
     origin = _origin_key(suspect_url)
     direct = find_brand_by_origin(origin)
     if direct:
         return direct
-    # Phase 1: add domain similarity + title + favicon + text scoring here.
+
+    # Check hostname & port
+    parsed = urlparse(suspect_url if "://" in suspect_url else f"http://{suspect_url}")
+    host = (parsed.hostname or "").lower()
+    labels = host.split(".")
+
+    best_brand: Optional[Brand] = None
+    best_score = 0.0
+
+    for brand in get_brands():
+        score = 0.0
+
+        # Check local test aliases
+        if (
+            brand.verification_status == "verified"
+            and host in [a.lower() for a in brand.aliases_for_local_testing]
+        ):
+            return brand
+
+        # Domain lookalike / skeleton matching
+        label_skeletons = [skeleton(lbl) for lbl in labels if lbl]
+        for protected in brand.lookalike_labels:
+            p_skel = skeleton(protected)
+            if not p_skel:
+                continue
+            for l_skel in label_skeletons:
+                if l_skel == p_skel:
+                    score += 0.5
+                    break
+                elif p_skel in l_skel or l_skel in p_skel:
+                    score += 0.3
+                    break
+
+        # Title keywords matching
+        if title:
+            title_lower = title.lower()
+            keyword_hits = sum(1 for kw in brand.title_keywords if kw.lower() in title_lower)
+            if brand.title_keywords:
+                score += 0.3 * (keyword_hits / len(brand.title_keywords))
+        else:
+            # Check keywords in URL path if no title
+            path_lower = (parsed.path or "").lower()
+            keyword_hits = sum(1 for kw in brand.title_keywords if kw.lower() in path_lower)
+            if keyword_hits > 0:
+                score += 0.2
+
+        if score > best_score:
+            best_score = score
+            best_brand = brand
+
+    if best_score >= 0.4:
+        return best_brand
+
     return None
 
 def save_brands(brands: list[Brand], path: Path = _BRANDS_FILE) -> None:

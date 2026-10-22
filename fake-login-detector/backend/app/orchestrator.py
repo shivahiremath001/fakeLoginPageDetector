@@ -320,24 +320,34 @@ class Orchestrator:
                     time.perf_counter() - stage_started
                 )
 
+                self._set_progress(scan_id, "building_evidence")
+                stage_started = time.perf_counter()
+
+                form_comp = self._make_form_comparison(suspect, genuine)
+                action_target = form_comp.suspect_action if form_comp else None
+
+                evidence_images: dict[str, str] = {}
+
+                if genuine and suspect.screenshot_path and genuine.screenshot_path:
+                    try:
+                        evidence_images = await build_evidence(
+                            scan_id=scan_id,
+                            suspect_path=suspect.screenshot_path,
+                            genuine_path=genuine.screenshot_path,
+                        )
+                    except Exception:
+                        logger.exception("Failed to generate comparison evidence")
+
+                timings["evidence"] = time.perf_counter() - stage_started
+
                 images: dict[str, str] = {}
+                images.update(evidence_images)
 
                 if suspect.screenshot_path:
                     images["suspect"] = suspect.screenshot_path
 
                 if genuine and genuine.screenshot_path:
                     images["genuine"] = genuine.screenshot_path
-
-                if genuine and suspect.screenshot_path and genuine.screenshot_path:
-                    try:
-                        evidence = await build_evidence(
-                            scan_id,
-                            suspect.screenshot_path,
-                            genuine.screenshot_path,
-                        )
-                        images.update(evidence)
-                    except Exception:
-                        logger.exception("Failed to generate comparison evidence")
 
                 for name, signal in scored.signals.items():
                     for evidence_name, path in signal.evidence_files.items():

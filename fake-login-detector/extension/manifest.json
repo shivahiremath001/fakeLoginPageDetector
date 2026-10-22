@@ -1,0 +1,44 @@
+{
+  "manifest_version": 3,
+  "name": "Fake Login Page Detector",
+  "version": "1.0.0",
+  "description": "Deterministic real-time detection of cloned login pages, credential harvesting, and lookalike domains.",
+  "permissions": [
+    "webNavigation",
+    "storage",
+    "tabs",
+    "scripting"
+  ],
+  "host_permissions": [
+    "http://localhost:8000/*",
+    "http://127.0.0.1:8000/*",
+    "http://*/*",
+    "https://*/*"
+  ],
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "content_scripts": [
+    {
+      "matches": ["http://*/*", "https://*/*"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "overlay.css",
+        "data/brands.json",
+        "warning.html",
+        "warning.css",
+        "warning.js"
+      ],
+      "matches": ["<all_urls>"]
+    }
+  ],
+  "action": {
+    "default_title": "Fake Login Page Detector"
+  }
+}

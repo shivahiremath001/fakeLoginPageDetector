@@ -1,6 +1,6 @@
 
 import pytest
-
+import asyncio
 from app.fetcher import PageFetcher, UnsafeTargetError, _validate_target
 
 
@@ -17,48 +17,60 @@ async def test_invalid_url_returns_error_without_starting_browser():
 
 
 
+
 @pytest.mark.asyncio
 async def test_local_page_capture(tmp_path, monkeypatch):
     from app.config import settings
 
-    # Keep generated screenshots inside pytest's temporary directory.
     monkeypatch.setattr(settings, "artifacts_dir", tmp_path)
     monkeypatch.setattr(settings, "allow_private_hosts", True)
 
     fetcher = PageFetcher()
     await fetcher.startup()
 
+    async def on_worker(coro):
+        """Run Playwright operations on the browser's owning event loop."""
+        assert fetcher._worker_loop is not None
+        future = asyncio.run_coroutine_threadsafe(
+            coro, fetcher._worker_loop
+        )
+        return await asyncio.wrap_future(future)
+
     try:
-        context = await fetcher._browser.new_context()
-        page = await context.new_page()
+        context = await on_worker(fetcher._browser.new_context())
+        try:
+            page = await on_worker(context.new_page())
 
-        await page.set_content("""
-            <!doctype html>
-            <html>
-              <head><title>Test Login Page</title></head>
-              <body>
-                <h1>Welcome</h1>
-                <img
-                    src="/logo.svg"
-                    alt="Test Company Logo"
-                    width="120"
-                    height="60"
-                />
-                <form action="/login" method="post">
-                  <input name="username">
-                  <input type="password" name="password">
-                  <button type="submit">Sign in</button>
-                </form>
-              </body>
-            </html>
-        """)
+            await on_worker(page.set_content("""
+                <!doctype html>
+                <html>
+                  <head><title>Test Login Page</title></head>
+                  <body>
+                    <h1>Welcome</h1>
+                    <img
+                        src="/logo.svg"
+                        alt="Test Company Logo"
+                        width="120"
+                        height="60"
+                    />
+                    <form action="/login" method="post">
+                      <input name="username">
+                      <input type="password" name="password">
+                      <button type="submit">Sign in</button>
+                    </form>
+                  </body>
+                </html>
+            """))
 
-        # Use a temporary local HTTP server in the next test for a full
-        # fetch() integration test. This test validates browser availability.
-        assert await page.title() == "Test Login Page"
-        assert await page.locator("form").count() == 1
+            title = await on_worker(page.title())
+            form_count = await on_worker(
+                page.locator("form").count()
+            )
 
-        await context.close()
+            assert title == "Test Login Page"
+            assert form_count == 1
+        finally:
+            await on_worker(context.close())
     finally:
         await fetcher.shutdown()
 
