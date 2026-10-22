@@ -1,4 +1,6 @@
 export function renderCompare(images = {}) {
+  console.log("[Compare] Received images:", images);
+  console.log("[Compare] Difference image:", images.diff);
   const shots = [
     { title: "Genuine page", src: images.genuine },
     { title: "Suspect page", src: images.suspect },
@@ -19,15 +21,15 @@ export function renderCompare(images = {}) {
       <h3>Side-by-side comparison</h3>
       <div class="compare-grid">
         ${shots
-          .map(
-            (shot) => `
+      .map(
+        (shot) => `
           <figure class="shot">
             <div class="shot-title">${shot.title}</div>
             <img src="${shot.src}" alt="${shot.title}" loading="lazy">
           </figure>
         `,
-          )
-          .join("")}
+      )
+      .join("")}
       </div>
     </div>
   `;

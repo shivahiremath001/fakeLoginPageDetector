@@ -10,6 +10,8 @@ from __future__ import annotations
 
 import json
 import logging
+import os
+import tempfile
 from pathlib import Path
 from typing import Optional
 
@@ -49,20 +51,16 @@ def get_brands() -> list[Brand]:
         load_brands()
     return _brands
 
-
 def find_brand_by_origin(origin: str) -> Optional[Brand]:
-    """
-    Return the Brand whose origins list contains the given origin key.
-
-    Inputs:  origin — "host:port" string (from origin_key())
-    Outputs: Brand or None
-    Failure: returns None; never raises
-    """
+    """Return a verified brand matching the given origin."""
     for brand in get_brands():
+        if brand.verification_status != "verified":
+            continue
+
         if origin in brand.origins or origin in brand.trusted_related_origins:
             return brand
-    return None
 
+    return None
 
 def match_brand(
     suspect_url: str,
@@ -94,7 +92,10 @@ def match_brand(
         score = 0.0
 
         # Check local test aliases
-        if host in [a.lower() for a in brand.aliases_for_local_testing]:
+        if (
+            brand.verification_status == "verified"
+            and host in [a.lower() for a in brand.aliases_for_local_testing]
+        ):
             return brand
 
         # Domain lookalike / skeleton matching
@@ -133,3 +134,34 @@ def match_brand(
 
     return None
 
+def save_brands(brands: list[Brand], path: Path = _BRANDS_FILE) -> None:
+    """Atomically save the brand registry and refresh the in-memory cache."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+
+    data = {
+        "brands": [brand.model_dump(mode="json") for brand in brands]
+    }
+
+    temp_path = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w",
+            encoding="utf-8",
+            dir=str(path.parent),
+            suffix=".tmp",
+            delete=False,
+        ) as temp_file:
+            temp_path = Path(temp_file.name)
+            json.dump(data, temp_file, indent=2, ensure_ascii=False)
+            temp_file.write("\n")
+
+        os.replace(temp_path, path)
+
+    except Exception:
+        if temp_path is not None:
+            temp_path.unlink(missing_ok=True)
+        raise
+
+    global _brands
+    _brands = list(brands)
+    logger.info("Saved %d brands to %s", len(_brands), path)

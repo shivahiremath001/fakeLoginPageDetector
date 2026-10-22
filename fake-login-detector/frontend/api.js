@@ -1,4 +1,4 @@
-const API_BASE = "http://127.0.0.1:8000";
+const API_BASE = "http://127.0.0.1:8001";
 
 export async function scanUrl(url, genuineUrl = "") {
   let response;
@@ -31,8 +31,8 @@ export async function scanUrl(url, genuineUrl = "") {
   if (!response.ok) {
     throw new Error(
       data?.message ||
-        data?.detail ||
-        `Scan failed with HTTP ${response.status}.`,
+      data?.detail ||
+      `Scan failed with HTTP ${response.status}.`,
     );
   }
 

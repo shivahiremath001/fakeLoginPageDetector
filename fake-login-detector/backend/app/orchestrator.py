@@ -28,6 +28,7 @@ from app.models import (
 )
 from app.registry import match_brand
 from app.scoring import compute_score
+from app.evidence import build_evidence
 
 logger = logging.getLogger(__name__)
 
@@ -325,13 +326,18 @@ class Orchestrator:
                 form_comp = self._make_form_comparison(suspect, genuine)
                 action_target = form_comp.suspect_action if form_comp else None
 
-                from app.evidence import build_evidence
-                evidence_images = await build_evidence(
-                    scan_id=scan_id,
-                    suspect=suspect,
-                    genuine=genuine,
-                    action_target=action_target,
-                )
+                evidence_images: dict[str, str] = {}
+
+                if genuine and suspect.screenshot_path and genuine.screenshot_path:
+                    try:
+                        evidence_images = await build_evidence(
+                            scan_id=scan_id,
+                            suspect_path=suspect.screenshot_path,
+                            genuine_path=genuine.screenshot_path,
+                        )
+                    except Exception:
+                        logger.exception("Failed to generate comparison evidence")
+
                 timings["evidence"] = time.perf_counter() - stage_started
 
                 images: dict[str, str] = {}

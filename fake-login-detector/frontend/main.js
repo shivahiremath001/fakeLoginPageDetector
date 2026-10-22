@@ -114,7 +114,7 @@ function renderDetectorHomepageMessage(scannedUrl) {
 function renderInsufficientEvidence(data, url) {
   showMessage(
     data.summary ||
-      "The scan did not collect enough reliable evidence. This does not mean the page is safe.",
+    "The scan did not collect enough reliable evidence. This does not mean the page is safe.",
     "No reliable safety verdict",
   );
 
@@ -139,13 +139,12 @@ function renderNormalVerdict(data, url, isPartial) {
 
       <p>${escapeHtml(data.summary || "No additional summary is available.")}</p>
 
-      ${
-        isPartial
-          ? `<p class="domain-note">
+      ${isPartial
+      ? `<p class="domain-note">
                Warning: This scan was incomplete. Treat the result as uncertain.
              </p>`
-          : ""
-      }
+      : ""
+    }
 
       <p class="domain-note">
         URL scanned: ${escapeHtml(data.suspect_url || url)}
@@ -181,11 +180,10 @@ function renderDomainSection(data, url) {
   domainBox.innerHTML = `
     <div class="card">
       <h3>Web address check</h3>
-      <p>${
-        genuineUrl
-          ? "The genuine reference page could not be captured."
-          : "No genuine reference page was available for comparison."
-      }</p>
+      <p>${genuineUrl
+      ? "The genuine reference page could not be captured."
+      : "No genuine reference page was available for comparison."
+    }</p>
       <p class="domain fake">
         ${escapeHtml(suspectHost)}
       </p>
@@ -206,30 +204,29 @@ function renderFormSection(data) {
 
         <p><strong>Reference page sends to:</strong></p>
         <p>${escapeHtml(form.genuine_action || "Not available")}</p>
-${
-  form.suspect_action &&
-  form.genuine_action &&
-  (() => {
-    try {
-      const suspectOrigin = new URL(form.suspect_action).origin;
-      const genuineOrigin = new URL(form.genuine_action).origin;
+${form.suspect_action &&
+        form.genuine_action &&
+        (() => {
+          try {
+            const suspectOrigin = new URL(form.suspect_action).origin;
+            const genuineOrigin = new URL(form.genuine_action).origin;
 
-      return suspectOrigin !== genuineOrigin;
-    } catch {
-      return false;
-    }
-  })()
-    ? `<p class="domain-note">
+            return suspectOrigin !== genuineOrigin;
+          } catch {
+            return false;
+          }
+        })()
+        ? `<p class="domain-note">
          Warning: The scanned page's form submits to a different origin
          than the reference page's form.
        </p>`
-    : !form.genuine_action && form.is_cross_origin
-      ? `<p class="domain-note">
+        : !form.genuine_action && form.is_cross_origin
+          ? `<p class="domain-note">
            Warning: The scanned page's form submits to a different origin
            than the page itself.
          </p>`
-      : ""
-}
+          : ""
+      }
       </div>
     `;
   } else {

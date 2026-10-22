@@ -15,7 +15,9 @@ Shutdown:
 from __future__ import annotations
 
 import asyncio
+import hmac
 import logging
+import re
 import sys
 import time
 import uuid
@@ -27,7 +29,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -36,6 +38,9 @@ from app.cache import TTLCache
 from app.config import settings
 from app.fetcher import fetcher
 from app.models import (
+    Brand,
+    BrandRegistrationRequest,
+    BrandRegistrationResponse,
     ErrorResponse,
     QuickCheckRequest,
     QuickCheckResult,
@@ -44,7 +49,12 @@ from app.models import (
     Verdict,
 )
 from app.orchestrator import orchestrator
-from app.registry import get_brands, load_brands
+from app.registry import (
+    find_brand_by_origin,
+    get_brands,
+    load_brands,
+    save_brands,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -126,6 +136,180 @@ def _register_routes(app: FastAPI) -> None:
         Used by the extension for data sync and by the UI brand selector.
         """
         return [b.model_dump() for b in get_brands()]
+    # ── Admin: trusted website registry ────────────────────────────────────
+
+    def require_admin(request: Request) -> None:
+        configured_token = settings.registry_admin_token
+        supplied_token = request.headers.get("X-Admin-Token", "")
+
+        if not configured_token:
+            raise HTTPException(
+                status_code=503,
+                detail="Admin API is not configured.",
+            )
+
+        if not hmac.compare_digest(supplied_token, configured_token):
+            raise HTTPException(
+                status_code=401,
+                detail="Invalid admin token.",
+            )
+
+    @app.get("/api/admin/brands", tags=["admin"])
+    async def admin_list_brands(request: Request) -> list[dict]:
+        """List registered websites; requires the admin token."""
+        require_admin(request)
+        return [brand.model_dump() for brand in get_brands()]
+
+    @app.post(
+        "/api/admin/brands",
+        tags=["admin"],
+        response_model=BrandRegistrationResponse,
+        status_code=201,
+    )
+    async def register_brand(
+        payload: BrandRegistrationRequest,
+        request: Request,
+    ) -> BrandRegistrationResponse:
+        """Register a website as pending verification."""
+        require_admin(request)
+
+        from app.utils.urls import origin_key
+
+        origin = origin_key(payload.official_url)
+        if not origin:
+            raise HTTPException(status_code=422, detail="Invalid official URL.")
+
+        brands = list(get_brands())
+
+        # Reject duplicate origins, including pending registrations.
+        for existing in brands:
+            existing_origins = (
+                existing.origins + existing.trusted_related_origins
+            )
+            if origin in existing_origins:
+                raise HTTPException(
+                    status_code=409,
+                    detail="This website origin is already registered.",
+                )
+
+        # Create a readable, unique ID from the organization name.
+        base_id = re.sub(
+            r"[^a-z0-9]+",
+            "_",
+            payload.name.lower(),
+        ).strip("_") or "organization"
+
+        brand_id = base_id
+        suffix = 2
+        existing_ids = {brand.id for brand in brands}
+
+        while brand_id in existing_ids:
+            brand_id = f"{base_id}_{suffix}"
+            suffix += 1
+
+        words = re.findall(r"[a-z0-9]+", payload.name.lower())
+
+        new_brand = Brand(
+            id=brand_id,
+            name=payload.name,
+            genuine_urls=[payload.official_url],
+            origins=[origin],
+            trusted_related_origins=[],
+            title_keywords=words,
+            lookalike_labels=words,
+            logo_phash="",
+            aliases_for_local_testing=[],
+            organization_type=payload.organization_type,
+            verification_status="pending",
+        )
+
+        brands.append(new_brand)
+
+        try:
+            save_brands(brands)
+        except Exception:
+            logger.exception("Failed to save website registration")
+            raise HTTPException(
+                status_code=500,
+                detail="Could not save the registration.",
+            )
+
+        return BrandRegistrationResponse(
+            id=new_brand.id,
+            name=new_brand.name,
+            official_url=payload.official_url,
+            organization_type=new_brand.organization_type,
+            verification_status="pending",
+            message="Registration saved. Verify the official website before trusting it.",
+        )
+
+    @app.post("/api/admin/brands/{brand_id}/verify", tags=["admin"])
+    async def verify_brand(
+        brand_id: str,
+        request: Request,
+    ) -> dict:
+        """Mark a registration verified after manually checking its official URL."""
+        require_admin(request)
+
+        brands = list(get_brands())
+        target = next((brand for brand in brands if brand.id == brand_id), None)
+
+        if target is None:
+            raise HTTPException(status_code=404, detail="Registration not found.")
+
+        if target.verification_status == "verified":
+            return {
+                "id": target.id,
+                "verification_status": "verified",
+                "message": "Website is already verified.",
+            }
+
+        target.verification_status = "verified"
+
+        try:
+            save_brands(brands)
+        except Exception:
+            logger.exception("Failed to verify website registration")
+            raise HTTPException(
+                status_code=500,
+                detail="Could not save the verification status.",
+            )
+
+        return {
+            "id": target.id,
+            "verification_status": "verified",
+            "message": "Website marked as verified.",
+        }
+
+    @app.delete("/api/admin/brands/{brand_id}", tags=["admin"])
+    async def delete_brand(brand_id: str, request: Request) -> dict:
+        """Delete a registered website; requires the admin token."""
+        require_admin(request)
+
+        brands = list(get_brands())
+        target = next((brand for brand in brands if brand.id == brand_id), None)
+
+        if target is None:
+            raise HTTPException(
+                status_code=404,
+                detail="Registration not found.",
+            )
+
+        brands = [brand for brand in brands if brand.id != brand_id]
+
+        try:
+            save_brands(brands)
+        except Exception:
+            logger.exception("Failed to delete website registration")
+            raise HTTPException(
+                status_code=500,
+                detail="Could not delete the registration.",
+            )
+
+        return {
+            "id": brand_id,
+            "message": "Registration deleted successfully.",
+        }
 
     # ── Scan ─────────────────────────────────────────────────────────────────
 

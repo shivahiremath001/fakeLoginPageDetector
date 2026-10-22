@@ -186,7 +186,53 @@ class Brand(BaseModel):
     lookalike_labels: list[str] = Field(default_factory=list)
     logo_phash: str = ""
     aliases_for_local_testing: list[str] = Field(default_factory=list)
+    organization_type: str = "Other"
+    verification_status: str = "verified"
+class BrandRegistrationRequest(BaseModel):
+    """Input received from the admin trusted-website form."""
 
+    name: str = Field(min_length=2, max_length=120)
+    official_url: str = Field(min_length=8, max_length=2048)
+    organization_type: str = Field(min_length=2, max_length=60)
+
+    @field_validator("name", "organization_type")
+    @classmethod
+    def strip_text(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("This field cannot be empty.")
+        return value
+
+    @field_validator("official_url")
+    @classmethod
+    def validate_official_url(cls, value: str) -> str:
+        from urllib.parse import urlparse
+
+        value = value.strip()
+        parsed = urlparse(value)
+
+        if (
+            parsed.scheme not in ("http", "https")
+            or not parsed.hostname
+            or any(char.isspace() for char in value)
+            or parsed.username is not None
+            or parsed.password is not None
+        ):
+            raise ValueError(
+                "Enter a valid official URL starting with http:// or https://."
+            )
+
+        return value
+
+class BrandRegistrationResponse(BaseModel):
+    """Response returned after a website is registered."""
+
+    id: str
+    name: str
+    official_url: str
+    organization_type: str
+    verification_status: str
+    message: str
 
 # ── Scan pipeline types ───────────────────────────────────────────────────────
 

@@ -336,6 +336,9 @@ class PageFetcher:
                 load_error=str(exc),
             )
 
+        if self._browser is None:
+            await self.startup()
+
         self._ensure_worker()
         assert self._worker_loop is not None
 
